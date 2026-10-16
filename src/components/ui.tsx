@@ -14,6 +14,19 @@ export function GradientDot({ size = 96 }: { size?: number }) {
   );
 }
 
+export function Avatar({ label, size = 48 }: { label: string; size?: number }) {
+  return (
+    <LinearGradient
+      colors={colors.gradient}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={{ width: size, height: size, borderRadius: size / 2, alignItems: 'center', justifyContent: 'center' }}
+    >
+      <Text style={{ color: colors.text, fontWeight: 'bold', fontSize: size * 0.38 }}>{label}</Text>
+    </LinearGradient>
+  );
+}
+
 type ButtonProps = {
   title: string;
   onPress: () => void;

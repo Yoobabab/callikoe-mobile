@@ -1,27 +1,44 @@
 import { requestRecordingPermissionsAsync } from 'expo-audio';
 import * as Linking from 'expo-linking';
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { ActivityIndicator, Platform, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { WebView } from 'react-native-webview';
-import { Button, GradientDot, textStyles } from '../components/ui';
-import { accountLabel, type Account } from '../lib/account';
+import { WebView, type WebViewMessageEvent } from 'react-native-webview';
+import { Button, textStyles } from '../components/ui';
+import { accountId, type Account } from '../lib/account';
+import { buildInjectedAppInfo, hostOf, isFromHosts, OPEN_WEB_SETTINGS_JS, parseWebMessage } from '../lib/bridge';
 import { buildLoginUrl } from '../lib/provision';
 import { colors, spacing } from '../theme';
-import Settings from './Settings';
+import MenuSheet from './MenuSheet';
 
-type Props = { account: Account; onLoggedOut: () => void };
+type Props = {
+  account: Account;
+  /** Incrémenté par l'appli pour forcer un rechargement (ex. compte re-sélectionné). */
+  reloadToken: number;
+  onOpenAccounts: () => void;
+  onScan: () => void;
+};
 
 type MicState = 'pending' | 'granted' | 'denied';
 
-export default function Phone({ account, onLoggedOut }: Props) {
+const INJECTED_APP_INFO = buildInjectedAppInfo(Platform.OS);
+
+export default function Phone({ account, reloadToken, onOpenAccounts, onScan }: Props) {
+  // `WebView<{}>` : avec le paramètre par défaut (undefined), les typages de react-native-webview réduisent les props à `never`.
+  const webRef = useRef<WebView<{}>>(null);
   const [mic, setMic] = useState<MicState>('pending');
-  const [webKey, setWebKey] = useState(0);
+  const [localReload, setLocalReload] = useState(0);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const loginUrl = useMemo(() => buildLoginUrl(account), [account]);
+  const trustedHosts = useMemo(
+    () => [account.host, account.fqdn, hostOf(account.app_login_url), hostOf(account.softphone_url)],
+    [account],
+  );
+  // Changer de compte ou demander un rechargement remonte la WebView (nouvelle connexion par jeton).
+  const webKey = `${accountId(account)}#${reloadToken}#${localReload}`;
 
   const askMic = useCallback(async () => {
     try {
@@ -36,28 +53,21 @@ export default function Phone({ account, onLoggedOut }: Props) {
     askMic();
   }, [askMic]);
 
-  const reload = useCallback(() => {
+  useEffect(() => {
     setLoadError(null);
     setLoading(true);
-    setWebKey((k) => k + 1); // remonte la WebView : nouvelle connexion avec le jeton d'appareil
-  }, []);
+  }, [webKey]);
 
-  const topBar = (
-    <View style={styles.topBar}>
-      <GradientDot size={14} />
-      <Text style={styles.topBarText} numberOfLines={1}>
-        {accountLabel(account)}
-      </Text>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Réglages"
-        hitSlop={12}
-        onPress={() => setSettingsOpen(true)}
-        style={({ pressed }) => [styles.gear, pressed && { opacity: 0.6 }]}
-      >
-        <Text style={styles.gearText}>⚙︎</Text>
-      </Pressable>
-    </View>
+  const reload = useCallback(() => setLocalReload((k) => k + 1), []);
+
+  const onMessage = useCallback(
+    (e: WebViewMessageEvent) => {
+      if (!isFromHosts(e.nativeEvent.url, trustedHosts)) return;
+      const msg = parseWebMessage(e.nativeEvent.data);
+      if (msg?.type === 'menu') setMenuOpen(true);
+      else if (msg?.type === 'accounts') onOpenAccounts();
+    },
+    [trustedHosts, onOpenAccounts],
   );
 
   let content: ReactNode;
@@ -77,6 +87,7 @@ export default function Phone({ account, onLoggedOut }: Props) {
         </Text>
         <Button title="Ouvrir les réglages" onPress={() => Linking.openSettings()} style={styles.fullWidth} />
         <Button title="Réessayer" variant="secondary" onPress={askMic} style={styles.fullWidth} />
+        <Button title="Comptes" variant="secondary" onPress={onOpenAccounts} style={styles.fullWidth} />
       </View>
     );
   } else if (loadError) {
@@ -85,12 +96,14 @@ export default function Phone({ account, onLoggedOut }: Props) {
         <Text style={[textStyles.h2, styles.centerText]}>Softphone indisponible</Text>
         <Text style={[textStyles.muted, styles.centerText]}>{loadError}</Text>
         <Button title="Réessayer" onPress={reload} style={styles.fullWidth} />
+        <Button title="Comptes" variant="secondary" onPress={onOpenAccounts} style={styles.fullWidth} />
       </View>
     );
   } else {
     content = (
       <View style={styles.webWrap}>
         <WebView
+          ref={webRef}
           key={webKey}
           source={{ uri: loginUrl }}
           style={styles.web}
@@ -103,6 +116,8 @@ export default function Phone({ account, onLoggedOut }: Props) {
           mediaCapturePermissionGrantType="grant"
           originWhitelist={['https://*', 'http://*']}
           setSupportMultipleWindows={false}
+          injectedJavaScriptBeforeContentLoaded={INJECTED_APP_INFO}
+          onMessage={onMessage}
           onLoadStart={() => setLoading(true)}
           onLoadEnd={() => setLoading(false)}
           onError={(e) =>
@@ -133,46 +148,31 @@ export default function Phone({ account, onLoggedOut }: Props) {
   }
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'bottom', 'left', 'right']}>
-      {topBar}
+    <SafeAreaView style={styles.safe} edges={['top']}>
       {content}
-      <Modal
-        visible={settingsOpen}
-        animationType="slide"
-        presentationStyle="fullScreen"
-        onRequestClose={() => setSettingsOpen(false)}
-      >
-        <Settings
-          account={account}
-          onClose={() => setSettingsOpen(false)}
-          onReload={() => {
-            setSettingsOpen(false);
-            reload();
-          }}
-          onLoggedOut={() => {
-            setSettingsOpen(false);
-            onLoggedOut();
-          }}
-        />
-      </Modal>
+      <MenuSheet
+        visible={menuOpen}
+        account={account}
+        onClose={() => setMenuOpen(false)}
+        onAccounts={() => {
+          setMenuOpen(false);
+          onOpenAccounts();
+        }}
+        onWebSettings={() => {
+          webRef.current?.injectJavaScript(OPEN_WEB_SETTINGS_JS);
+          setMenuOpen(false);
+        }}
+        onScan={() => {
+          setMenuOpen(false);
+          onScan();
+        }}
+      />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
-  topBar: {
-    height: 40,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing.md,
-    gap: spacing.sm,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.surfaceBorder,
-  },
-  topBarText: { flex: 1, color: colors.text, fontSize: 14, fontWeight: '600' },
-  gear: { paddingHorizontal: spacing.xs },
-  gearText: { color: colors.text, fontSize: 22 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   padded: { paddingHorizontal: spacing.lg, gap: spacing.md },
   centerText: { textAlign: 'center' },
