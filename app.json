@@ -34,7 +34,12 @@
       "permissions": [
         "CAMERA",
         "RECORD_AUDIO",
-        "MODIFY_AUDIO_SETTINGS"
+        "MODIFY_AUDIO_SETTINGS",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
       ],
       "predictiveBackGestureEnabled": false
     },
@@ -60,6 +65,15 @@
     ],
     "runtimeVersion": {
       "policy": "sdkVersion"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "43b9d279-dd8e-495b-a052-85a2d5dc2246"
+      }
+    },
+    "owner": "yoobabab",
+    "updates": {
+      "url": "https://u.expo.dev/43b9d279-dd8e-495b-a052-85a2d5dc2246"
     }
   }
 }
