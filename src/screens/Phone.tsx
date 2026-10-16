@@ -1,4 +1,4 @@
-import { requestRecordingPermissionsAsync } from 'expo-audio';
+import { requestRecordingPermissionsAsync, setAudioModeAsync } from 'expo-audio';
 import * as Linking from 'expo-linking';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Platform, StyleSheet, Text, View } from 'react-native';
@@ -22,6 +22,16 @@ type Props = {
 type MicState = 'pending' | 'granted' | 'denied';
 
 const INJECTED_APP_INFO = buildInjectedAppInfo(Platform.OS);
+
+/** Pendant un appel : le son sort par l'écouteur (oreille), ou par le haut-parleur si on l'a demandé. */
+function routeAudio(call: boolean, speaker: boolean) {
+  setAudioModeAsync({
+    playsInSilentMode: true,
+    allowsRecording: true,
+    interruptionMode: call ? 'doNotMix' : 'mixWithOthers',
+    shouldRouteThroughEarpiece: call && !speaker,
+  }).catch(() => {});
+}
 
 export default function Phone({ account, reloadToken, onOpenAccounts, onScan }: Props) {
   // `WebView<{}>` : avec le paramètre par défaut (undefined), les typages de react-native-webview réduisent les props à `never`.
@@ -65,6 +75,7 @@ export default function Phone({ account, reloadToken, onOpenAccounts, onScan }: 
       if (!isFromHosts(e.nativeEvent.url, trustedHosts)) return;
       const msg = parseWebMessage(e.nativeEvent.data);
       if (msg?.type === 'menu') setMenuOpen(true);
+      else if (msg?.type === 'audio') routeAudio(msg.call, msg.speaker);
       else if (msg?.type === 'accounts') onOpenAccounts();
     },
     [trustedHosts, onOpenAccounts],

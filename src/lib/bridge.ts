@@ -1,7 +1,7 @@
 import { APP_VERSION } from '../theme';
 
 /** Messages envoyés par le softphone web via window.ReactNativeWebView.postMessage(JSON.stringify({ type })). */
-export type WebMessage = { type: 'menu' } | { type: 'accounts' };
+export type WebMessage = { type: 'menu' } | { type: 'accounts' } | { type: 'audio'; call: boolean; speaker: boolean };
 
 export function parseWebMessage(data: string): WebMessage | null {
   try {
@@ -9,6 +9,10 @@ export function parseWebMessage(data: string): WebMessage | null {
     if (!msg || typeof msg !== 'object') return null;
     const type = (msg as Record<string, unknown>).type;
     if (type === 'menu' || type === 'accounts') return { type };
+    if (type === 'audio') {
+      const m = msg as Record<string, unknown>;
+      return { type, call: m.call === true, speaker: m.speaker === true };
+    }
     return null;
   } catch {
     return null;
