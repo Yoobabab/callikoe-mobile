@@ -24,13 +24,21 @@ type MicState = 'pending' | 'granted' | 'denied';
 const INJECTED_APP_INFO = buildInjectedAppInfo(Platform.OS);
 
 /** Pendant un appel : le son sort par l'écouteur (oreille), ou par le haut-parleur si on l'a demandé. */
-function routeAudio(call: boolean, speaker: boolean) {
+let routeTimers: ReturnType<typeof setTimeout>[] = [];
+function applyRoute(call: boolean, speaker: boolean) {
   setAudioModeAsync({
     playsInSilentMode: true,
     allowsRecording: true,
     interruptionMode: call ? 'doNotMix' : 'mixWithOthers',
     shouldRouteThroughEarpiece: call && !speaker,
   }).catch(() => {});
+}
+function routeAudio(call: boolean, speaker: boolean) {
+  // La page web règle elle aussi le son de l'iPhone quand le micro et le son de l'appel démarrent :
+  // on redemande l'écouteur plusieurs fois pendant les premières secondes pour avoir le dernier mot.
+  routeTimers.forEach(clearTimeout);
+  applyRoute(call, speaker);
+  routeTimers = call ? [300, 900, 2000, 4000].map((ms) => setTimeout(() => applyRoute(call, speaker), ms)) : [];
 }
 
 export default function Phone({ account, reloadToken, onOpenAccounts, onScan }: Props) {
