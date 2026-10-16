@@ -1,0 +1,35 @@
+# Publie l'appli dans Expo Go à chaque modification (comme les autres applis) : rien à installer sur le PC.
+# Il faut le secret EXPO_TOKEN dans le dépôt (Settings › Secrets and variables › Actions).
+name: Publier dans Expo Go
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+      - run: npm ci
+      - name: Projet Expo (créé la première fois)
+        run: eas init --non-interactive --force
+      - name: Publication
+        run: eas update --branch main --message "${{ github.event.head_commit.message || 'Publication' }}" --non-interactive
+      - name: Lien pour Expo Go
+        run: |
+          OWNER="$(eas whoami 2>/dev/null | head -n1)"
+          PID="$(node -e 'console.log(require("./app.json").expo.extra?.eas?.projectId||"")')"
+          echo "### Ouvrir dans Expo Go" >> "$GITHUB_STEP_SUMMARY"
+          echo "https://expo.dev/accounts/${OWNER}/projects/callikoe-mobile/updates (bouton « Preview » → QR code à scanner avec Expo Go)" >> "$GITHUB_STEP_SUMMARY"
+          echo "exp://u.expo.dev/${PID}?channel-name=main" >> "$GITHUB_STEP_SUMMARY"
+          echo "::notice title=Expo Go::https://expo.dev/accounts/${OWNER}/projects/callikoe-mobile/updates · exp://u.expo.dev/${PID}?channel-name=main"

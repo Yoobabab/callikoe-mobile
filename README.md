@@ -4,7 +4,12 @@
 
 Version actuelle : **0.1.0** (première version, faite pour tester dans Expo Go).
 
-## Tester avec Expo Go
+## Tester avec Expo Go (sans rien installer sur le PC)
+
+À chaque modification, GitHub publie l'appli automatiquement (action « Publier dans Expo Go », secret `EXPO_TOKEN` du dépôt).
+Ouvre le lien donné par l'action (onglet *Actions* › dernière exécution) ou la page du projet sur expo.dev, bouton **Preview**, et scanne le QR code avec Expo Go.
+
+### En local (développeurs)
 
 Prérequis : Node.js 20 ou plus, et l'appli **Expo Go** installée sur ton téléphone (App Store / Google Play).
 
