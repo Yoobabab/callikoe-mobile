@@ -1,0 +1,55 @@
+{
+  "expo": {
+    "name": "Callikoe",
+    "slug": "callikoe-mobile",
+    "version": "0.1.0",
+    "scheme": "callikoe",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#16141a",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#16141a"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "fr.irtnetwork.callikoe",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Scanner le QR code de configuration de ton poste.",
+        "NSMicrophoneUsageDescription": "Parler pendant tes appels.",
+        "UIBackgroundModes": ["audio", "voip"]
+      }
+    },
+    "android": {
+      "package": "fr.irtnetwork.callikoe",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#16141a"
+      },
+      "permissions": ["CAMERA", "RECORD_AUDIO", "MODIFY_AUDIO_SETTINGS"],
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-secure-store",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Scanner le QR code de configuration de ton poste.",
+          "microphonePermission": "Parler pendant tes appels.",
+          "recordAudioAndroid": true
+        }
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Parler pendant tes appels."
+        }
+      ]
+    ]
+  }
+}
