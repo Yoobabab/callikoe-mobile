@@ -6,10 +6,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button, textStyles } from '../components/ui';
 import { isProvisionUrl, MSG_NOT_CALLIKOE_QR, provisionUrlFromDeepLink } from '../lib/provision';
 import { colors, radius, spacing } from '../theme';
+import { useBrand } from '../lib/brand';
 
 type Props = { onScanned: (provisionUrl: string) => void; onCancel: () => void };
 
 export default function Scan({ onScanned, onCancel }: Props) {
+  const brand = useBrand();
   const [permission, requestPermission] = useCameraPermissions();
   const [error, setError] = useState<string | null>(null);
   const handled = useRef(false);
@@ -76,7 +78,7 @@ export default function Scan({ onScanned, onCancel }: Props) {
       />
       <SafeAreaView style={styles.overlay} pointerEvents="box-none">
         <Text style={styles.overlayTitle}>Vise le QR code Callikoe</Text>
-        <View style={styles.frame} />
+        <View style={[styles.frame, { borderColor: brand.gradient[0] }]} />
         <View style={styles.overlayBottom}>
           {error ? (
             <View style={styles.errorBox}>

@@ -1,12 +1,14 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import type { ReactNode } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View, type ViewStyle } from 'react-native';
+import { useBrand } from '../lib/brand';
 import { colors, radius, spacing } from '../theme';
 
 export function GradientDot({ size = 96 }: { size?: number }) {
+  const brand = useBrand();
   return (
     <LinearGradient
-      colors={colors.gradient}
+      colors={brand.gradient}
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
       style={{ width: size, height: size, borderRadius: size / 2 }}
@@ -15,9 +17,10 @@ export function GradientDot({ size = 96 }: { size?: number }) {
 }
 
 export function Avatar({ label, size = 48 }: { label: string; size?: number }) {
+  const brand = useBrand();
   return (
     <LinearGradient
-      colors={colors.gradient}
+      colors={brand.gradient}
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
       style={{ width: size, height: size, borderRadius: size / 2, alignItems: 'center', justifyContent: 'center' }}
@@ -37,6 +40,7 @@ type ButtonProps = {
 };
 
 export function Button({ title, onPress, variant = 'primary', loading, disabled, style }: ButtonProps) {
+  const brand = useBrand();
   const isDisabled = disabled || loading;
   const content = loading ? (
     <ActivityIndicator color={colors.text} />
@@ -52,7 +56,7 @@ export function Button({ title, onPress, variant = 'primary', loading, disabled,
       style={({ pressed }) => [{ opacity: isDisabled ? 0.5 : pressed ? 0.8 : 1 }, style]}
     >
       {variant === 'primary' ? (
-        <LinearGradient colors={colors.gradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.button}>
+        <LinearGradient colors={brand.gradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.button}>
           {content}
         </LinearGradient>
       ) : (

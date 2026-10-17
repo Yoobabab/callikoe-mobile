@@ -20,6 +20,7 @@ import Confirm from './src/screens/Confirm';
 import Phone from './src/screens/Phone';
 import Scan from './src/screens/Scan';
 import Welcome from './src/screens/Welcome';
+import { loadCachedBrand, refreshBrand } from './src/lib/brand';
 import { colors } from './src/theme';
 
 /**
@@ -45,6 +46,11 @@ export default function App() {
 
   const hasAccounts = state.accounts.length > 0;
   const active: Account | null = state.accounts.find((a) => accountId(a) === state.activeId) ?? null;
+
+  // Couleurs du thème du serveur du compte actif (Paramètres › Apparence de la console multi-tenant)
+  useEffect(() => { loadCachedBrand(); }, []);
+  const activeKey = active ? accountId(active) : '';
+  useEffect(() => { refreshBrand(active); }, [activeKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const goBack = useCallback((from: Origin) => {
     if (!stateRef.current.accounts.length) setRoute({ name: 'welcome' });

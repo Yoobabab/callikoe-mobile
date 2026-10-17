@@ -3,6 +3,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { textStyles } from '../components/ui';
 import { accountId, type Account } from '../lib/account';
 import { colors, radius, spacing } from '../theme';
+import { useBrand } from '../lib/brand';
 
 type Props = {
   accounts: Account[];
@@ -14,6 +15,7 @@ type Props = {
 };
 
 export default function Accounts({ accounts, activeId, onBack, onAdd, onSelect, onDelete }: Props) {
+  const brand = useBrand();
   const confirmDelete = (account: Account) => {
     const id = accountId(account);
     Alert.alert(
@@ -34,7 +36,7 @@ export default function Accounts({ accounts, activeId, onBack, onAdd, onSelect, 
         </Pressable>
         <Text style={styles.title}>Comptes</Text>
         <Pressable accessibilityRole="button" hitSlop={12} onPress={onAdd} style={[styles.side, styles.sideRight]}>
-          <Text style={styles.add}>Ajouter</Text>
+          <Text style={[styles.add, { color: brand.gradient[0] }]}>Ajouter</Text>
         </Pressable>
       </View>
 
@@ -57,7 +59,7 @@ export default function Accounts({ accounts, activeId, onBack, onAdd, onSelect, 
                 onLongPress={() => confirmDelete(item)}
                 style={({ pressed }) => [styles.rowMain, pressed && { opacity: 0.7 }]}
               >
-                <View style={[styles.check, active && styles.checkActive]}>
+                <View style={[styles.check, active && { backgroundColor: brand.primary, borderColor: brand.primary }]}>
                   {active ? <Text style={styles.checkMark}>✓</Text> : null}
                 </View>
                 <View style={styles.rowText}>

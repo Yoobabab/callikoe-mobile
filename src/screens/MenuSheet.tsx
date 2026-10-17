@@ -3,6 +3,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Avatar } from '../components/ui';
 import { initials, type Account } from '../lib/account';
 import { APP_VERSION, colors, radius, spacing } from '../theme';
+import { useBrand } from '../lib/brand';
 
 type Props = {
   visible: boolean;
@@ -19,6 +20,7 @@ export const ABOUT_TEXT = `Callikoe mobile ${APP_VERSION} · IRT NETWORK`;
 
 /** Menu natif ouvert par le softphone web ({"type":"menu"}), sur le modèle de l'appli 3CX. */
 export default function MenuSheet({ visible, account, onClose, onAccounts, onWebSettings, onScan }: Props) {
+  const brand = useBrand();
   const items: { label: string; onPress: () => void }[] = [
     { label: 'Comptes', onPress: onAccounts },
     { label: 'Réglages', onPress: onWebSettings },
@@ -46,7 +48,7 @@ export default function MenuSheet({ visible, account, onClose, onAccounts, onWeb
               </Text>
             </View>
             <Pressable accessibilityRole="button" hitSlop={12} onPress={onClose}>
-              <Text style={styles.close}>Fermer</Text>
+              <Text style={[styles.close, { color: brand.gradient[0] }]}>Fermer</Text>
             </Pressable>
           </View>
           {items.map((item) => (
