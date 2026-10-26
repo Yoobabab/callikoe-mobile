@@ -12,4 +12,4 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: Dernières constructions
-        run: npx --yes eas-cli build:list --limit 3 --non-interactive --json | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{for(const b of JSON.parse(d))console.log([b.platform,b.buildProfile,b.status,b.error?.message||"",b.artifacts?.buildUrl||b.artifacts?.applicationArchiveUrl||"",b.logFiles?.[0]||""].join(" | "))})'
+        run: npx --yes eas-cli build:list --limit 3 --non-interactive --json | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{for(const b of JSON.parse(d))console.log("::notice title=Construction::"+[b.platform,b.buildProfile,b.status,b.error?.message||"",b.artifacts?.buildUrl||b.artifacts?.applicationArchiveUrl||"",b.logFiles?.[0]||""].join(" | "))})'
