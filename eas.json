@@ -1,17 +1,32 @@
 {
-  "cli": { "version": ">= 16.0.0", "appVersionSource": "local" },
+  "cli": {
+    "version": ">= 16.0.0",
+    "appVersionSource": "local"
+  },
   "build": {
     "dev": {
       "developmentClient": true,
       "distribution": "internal",
-      "android": { "buildType": "apk" },
-      "env": { "EAS_BUILD_PROFILE": "dev" }
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EAS_BUILD_PROFILE": "dev"
+      },
+      "environment": "development"
     },
     "apk": {
       "distribution": "internal",
-      "android": { "buildType": "apk" },
-      "ios": { "simulator": false },
-      "env": { "EAS_BUILD_PROFILE": "apk" }
+      "android": {
+        "buildType": "apk"
+      },
+      "ios": {
+        "simulator": false
+      },
+      "env": {
+        "EAS_BUILD_PROFILE": "apk"
+      },
+      "environment": "preview"
     }
   }
 }
