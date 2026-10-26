@@ -97,6 +97,9 @@ export default function App() {
   /** QR scanné et confirmé : ajoute le compte (ou remplace celui qui a le même identifiant) et l'active. */
   const onConfirm = useCallback(
     async (acc: Account) => {
+      // Même compte scanné à nouveau : l'ancien jeton du téléphone est retiré du PBX (sinon il resterait valable)
+      const old = stateRef.current.accounts.find((a) => accountId(a) === accountId(acc));
+      if (old && old.device_token !== acc.device_token) logoutDevice(old).catch(() => {});
       await persist({ accounts: upsertAccount(stateRef.current.accounts, acc), activeId: accountId(acc) });
       setReloadToken((t) => t + 1);
       setRoute({ name: 'main' });

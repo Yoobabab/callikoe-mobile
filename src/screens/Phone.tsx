@@ -1,7 +1,7 @@
 import { requestRecordingPermissionsAsync, setAudioModeAsync } from 'expo-audio';
 import * as Linking from 'expo-linking';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ActivityIndicator, Platform, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, AppState, Platform, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import { Button, textStyles } from '../components/ui';
@@ -78,6 +78,19 @@ export default function Phone({ account, reloadToken, onOpenAccounts, onScan }: 
 
   const reload = useCallback(() => setLocalReload((k) => k + 1), []);
 
+  // Le son revient à la normale si la page est rechargée ou quittée pendant un appel (changement de compte, plantage…)
+  useEffect(() => () => routeAudio(false, false), [webKey]);
+
+  // La session du softphone dure 12 h : au retour au premier plan après ~11 h, on se reconnecte avec le jeton du téléphone
+  const loadedAt = useRef(Date.now());
+  useEffect(() => { loadedAt.current = Date.now(); }, [webKey]);
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (st) => {
+      if (st === 'active' && Date.now() - loadedAt.current > 11 * 3600_000) reload();
+    });
+    return () => sub.remove();
+  }, [reload]);
+
   const onMessage = useCallback(
     (e: WebViewMessageEvent) => {
       if (!isFromHosts(e.nativeEvent.url, trustedHosts)) return;
@@ -132,7 +145,7 @@ export default function Phone({ account, reloadToken, onOpenAccounts, onScan }: 
           domStorageEnabled
           allowsInlineMediaPlayback
           mediaPlaybackRequiresUserAction={false}
-          mediaCapturePermissionGrantType="grant"
+          mediaCapturePermissionGrantType="grantIfSameHostElsePrompt"
           originWhitelist={['https://*', 'http://*']}
           setSupportMultipleWindows={false}
           injectedJavaScriptBeforeContentLoaded={INJECTED_APP_INFO}
@@ -145,12 +158,17 @@ export default function Phone({ account, reloadToken, onOpenAccounts, onScan }: 
             )
           }
           onHttpError={(e) => {
-            if (e.nativeEvent.statusCode >= 500) {
-              setLoadError(`Le PBX a répondu avec une erreur (${e.nativeEvent.statusCode}).`);
+            const code = e.nativeEvent.statusCode;
+            if (code === 401 || code === 403) {
+              setLoadError("Ce téléphone n'est plus autorisé sur ce compte (accès retiré ou expiré). Supprime le compte dans Comptes, puis scanne un nouveau QR code.");
+            } else if (code >= 500) {
+              setLoadError(`Le PBX a répondu avec une erreur (${code}).`);
             }
           }}
           onShouldStartLoadWithRequest={(req) => {
-            if (/^https?:/i.test(req.url) || req.url === 'about:blank') return true;
+            if (req.url === 'about:blank' || req.isTopFrame === false) return true;
+            // Pages du PBX dans l'appli ; les autres sites (lien dans un message…) s'ouvrent dans le navigateur
+            if (/^https?:/i.test(req.url) && trustedHosts.includes(hostOf(req.url))) return true;
             Linking.openURL(req.url).catch(() => {});
             return false;
           }}

@@ -29,6 +29,7 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: 22
+          cache: npm
       - name: Préparer le rapport d'erreurs
         run: |
           cat > "$RUNNER_TEMP/etape.sh" <<'EOS'
@@ -43,14 +44,12 @@ jobs:
           chmod +x "$RUNNER_TEMP/etape.sh"
       - name: Installer les dépendances
         run: $RUNNER_TEMP/etape.sh "Installation" npm ci
-      - name: Installer EAS
-        run: $RUNNER_TEMP/etape.sh "Installation EAS" npm install --global eas-cli
       - name: Vérifier le code
         run: $RUNNER_TEMP/etape.sh "Vérification du code" npx tsc --noEmit
       - name: Relier le projet au compte Expo (première fois seulement)
         run: |
           if ! node -e "process.exit(require('./app.json').expo?.extra?.eas?.projectId ? 0 : 1)"; then
-            $RUNNER_TEMP/etape.sh "Création du projet Expo" eas init --non-interactive --force
+            $RUNNER_TEMP/etape.sh "Création du projet Expo" npx --yes eas-cli init --non-interactive --force
           fi
           node -e '
             const fs = require("fs");
@@ -64,7 +63,7 @@ jobs:
           MESSAGE: ${{ github.event.head_commit.message || 'Publication manuelle' }}
         run: |
           TITRE=$(echo "$MESSAGE" | head -n 1)
-          $RUNNER_TEMP/etape.sh "Publication" eas update --branch main --message "$TITRE" --non-interactive
+          $RUNNER_TEMP/etape.sh "Publication" npx --yes eas-cli update --branch main --message "$TITRE" --non-interactive
       - name: Enregistrer l'identifiant du projet Expo
         run: |
           if ! git diff --quiet app.json; then

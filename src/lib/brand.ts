@@ -46,7 +46,9 @@ export async function loadCachedBrand(): Promise<void> {
   } catch { /* couleurs Callikoe */ }
 }
 /** Compte actif changé (ou appli rouverte) : couleurs de son serveur ; sans compte, couleurs Callikoe */
+let lastRequest = 0;
 export async function refreshBrand(account: Account | null, timeoutMs = 6000): Promise<void> {
+  const req = ++lastRequest;   // seul le dernier compte demandé compte (changement de compte rapide)
   if (!account) { setBrand(DEFAULT_BRAND); return; }
   const url = themeUrl(account);
   if (!url) return;
@@ -56,6 +58,7 @@ export async function refreshBrand(account: Account | null, timeoutMs = 6000): P
     const r = await fetch(url, { signal: ctrl.signal, headers: { accept: 'application/json' } });
     const data = r.ok ? await r.json() : null;
     const b = brandFromTheme(data) ?? DEFAULT_BRAND;   // PBX sans thème (ancienne version) : couleurs Callikoe
+    if (req !== lastRequest) return;
     setBrand(b);
     await SecureStore.setItemAsync(CACHE_KEY, JSON.stringify({ color: b.primary, gradient: b.gradient }));
   } catch { /* hors ligne : on garde les couleurs connues */ } finally { clearTimeout(t); }
