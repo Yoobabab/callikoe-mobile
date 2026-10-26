@@ -21,6 +21,7 @@ import Phone from './src/screens/Phone';
 import Scan from './src/screens/Scan';
 import Welcome from './src/screens/Welcome';
 import { loadCachedBrand, refreshBrand } from './src/lib/brand';
+import { initNativeCalls, setNativeAccounts } from './src/lib/nativeCalls';
 import { colors } from './src/theme';
 
 /**
@@ -51,6 +52,9 @@ export default function App() {
   useEffect(() => { loadCachedBrand(); }, []);
   const activeKey = active ? accountId(active) : '';
   useEffect(() => { refreshBrand(active); }, [activeKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Appels natifs (vraie version de l'appli) : notifications de chaque PBX, ligne du compte actif
+  const accountsKey = state.accounts.map(accountId).join('|');
+  useEffect(() => { initNativeCalls(); setNativeAccounts(stateRef.current.accounts, active); }, [accountsKey, activeKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const goBack = useCallback((from: Origin) => {
     if (!stateRef.current.accounts.length) setRoute({ name: 'welcome' });

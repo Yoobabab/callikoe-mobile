@@ -10,6 +10,8 @@ import { buildInjectedAppInfo, hostOf, isFromHosts, OPEN_WEB_SETTINGS_JS, parseW
 import { buildLoginUrl } from '../lib/provision';
 import { colors, spacing } from '../theme';
 import MenuSheet from './MenuSheet';
+import CallOverlay from './CallOverlay';
+import { dial, initNativeCalls } from '../lib/nativeCalls';
 
 type Props = {
   account: Account;
@@ -21,7 +23,7 @@ type Props = {
 
 type MicState = 'pending' | 'granted' | 'denied';
 
-const INJECTED_APP_INFO = buildInjectedAppInfo(Platform.OS);
+const INJECTED_APP_INFO = buildInjectedAppInfo(Platform.OS, initNativeCalls());
 
 /** Pendant un appel : le son sort par l'écouteur (oreille), ou par le haut-parleur si on l'a demandé. */
 let routeTimers: ReturnType<typeof setTimeout>[] = [];
@@ -98,6 +100,7 @@ export default function Phone({ account, reloadToken, onOpenAccounts, onScan }: 
       if (msg?.type === 'menu') setMenuOpen(true);
       else if (msg?.type === 'audio') routeAudio(msg.call, msg.speaker);
       else if (msg?.type === 'accounts') onOpenAccounts();
+      else if (msg?.type === 'dial') dial(msg.number, msg.name).catch(() => {});
     },
     [trustedHosts, onOpenAccounts],
   );
@@ -187,6 +190,7 @@ export default function Phone({ account, reloadToken, onOpenAccounts, onScan }: 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       {content}
+      <CallOverlay />
       <MenuSheet
         visible={menuOpen}
         account={account}

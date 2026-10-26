@@ -1,0 +1,37 @@
+# Construit la vraie version de l'appli (sonnerie du système, appels appli fermée) sur les serveurs d'Expo.
+# À lancer à la main : onglet Actions › « Construire la vraie version » › Run workflow (quelques minutes GitHub seulement :
+# la construction elle-même se fait chez Expo, le lien de téléchargement apparaît sur expo.dev › Builds).
+name: Construire la vraie version
+
+on:
+  workflow_dispatch:
+    inputs:
+      plateforme:
+        description: "android (fichier APK à installer) ou ios (compte Apple nécessaire)"
+        required: true
+        default: android
+        type: choice
+        options: [android, ios]
+      profil:
+        description: "apk (normal) ou dev (version de développement, pour chercher un problème)"
+        required: true
+        default: apk
+        type: choice
+        options: [apk, dev]
+
+jobs:
+  construire:
+    runs-on: ubuntu-latest
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Vérifier le code
+        run: npx tsc --noEmit
+      - name: Lancer la construction chez Expo (sans attendre la fin)
+        run: npx --yes eas-cli build --platform "${{ inputs.plateforme }}" --profile "${{ inputs.profil }}" --non-interactive --no-wait

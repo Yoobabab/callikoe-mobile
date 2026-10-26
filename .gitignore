@@ -39,3 +39,7 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Firebase (notifications Android) : donné à Expo, jamais publié ici
+google-services.json
+GoogleService-Info.plist
