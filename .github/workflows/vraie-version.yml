@@ -52,6 +52,7 @@ jobs:
           EXPO_ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           EXPO_ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
           EXPO_APPLE_TEAM_ID: A67K4V32H6
+          EXPO_APPLE_TEAM_TYPE: COMPANY_OR_ORGANIZATION
         run: |
           npx --yes eas-cli --version
           (while true; do sleep 3; printf '\r'; done) | script -qefc "npx --yes eas-cli credentials:configure-build -p ios -e ${{ inputs.profil }}" /dev/null
@@ -60,6 +61,7 @@ jobs:
           EXPO_ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           EXPO_ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
           EXPO_APPLE_TEAM_ID: A67K4V32H6
+          EXPO_APPLE_TEAM_TYPE: COMPANY_OR_ORGANIZATION
         run: |
           SUBMIT=""; [ "${{ inputs.profil }}" = "store" ] && SUBMIT="--auto-submit-with-profile=store"
           npx --yes eas-cli build --platform "${{ inputs.plateforme }}" --profile "${{ inputs.profil }}" $SUBMIT --non-interactive --no-wait
