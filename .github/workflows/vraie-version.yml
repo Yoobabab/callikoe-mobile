@@ -43,6 +43,18 @@ jobs:
           [ -n "$ASC_API_KEY" ] || { echo "::error::Secret ASC_API_KEY manquant (clé .p8 d'App Store Connect)"; exit 1; }
           printf '%s\n' "$ASC_API_KEY" > "$RUNNER_TEMP/asc.p8"
           echo "EXPO_ASC_API_KEY_PATH=$RUNNER_TEMP/asc.p8" >> "$GITHUB_ENV"
+      # iPhone : certificats et profil de l'appli créés (ou repris) avec la clé App Store Connect. Expo ne sait le faire
+      # qu'en mode « questions » : on simule un terminal et on répond « oui » (réponse par défaut) à chaque question.
+      - name: Certificats iPhone (créés au premier lancement, repris ensuite)
+        if: inputs.plateforme == 'ios'
+        timeout-minutes: 10
+        env:
+          EXPO_ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          EXPO_ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          EXPO_APPLE_TEAM_ID: A67K4V32H6
+        run: |
+          npx --yes eas-cli --version
+          (while true; do sleep 3; printf '\r'; done) | script -qefc "npx --yes eas-cli credentials:configure-build -p ios -e ${{ inputs.profil }}" /dev/null
       - name: Lancer la construction chez Expo (sans attendre la fin)
         env:
           EXPO_ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
