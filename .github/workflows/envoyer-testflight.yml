@@ -14,6 +14,11 @@ jobs:
       EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
     steps:
       - uses: actions/checkout@v5
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
       - name: Clé App Store Connect
         env:
           ASC_API_KEY: ${{ secrets.ASC_API_KEY }}
