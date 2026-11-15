@@ -13,11 +13,11 @@ on:
         type: choice
         options: [android, ios]
       profil:
-        description: "apk (normal) ou dev (version de développement, pour chercher un problème)"
+        description: "apk (normal), dev (version de développement, pour chercher un problème) ou store (iPhone : envoyée sur TestFlight / App Store)"
         required: true
         default: apk
         type: choice
-        options: [apk, dev]
+        options: [apk, dev, store]
 
 jobs:
   construire:
@@ -33,5 +33,21 @@ jobs:
       - run: npm ci
       - name: Vérifier le code
         run: npx tsc --noEmit
+      # Clé App Store Connect (secrets ASC_API_KEY, ASC_KEY_ID, ASC_ISSUER_ID, ajoutés par le propriétaire) : Expo crée lui-même
+      # les certificats iPhone et envoie la version sur TestFlight. Le fichier de la clé n'existe que le temps de ce lancement.
+      - name: Clé App Store Connect
+        if: inputs.plateforme == 'ios'
+        env:
+          ASC_API_KEY: ${{ secrets.ASC_API_KEY }}
+        run: |
+          [ -n "$ASC_API_KEY" ] || { echo "::error::Secret ASC_API_KEY manquant (clé .p8 d'App Store Connect)"; exit 1; }
+          printf '%s\n' "$ASC_API_KEY" > "$RUNNER_TEMP/asc.p8"
+          echo "EXPO_ASC_API_KEY_PATH=$RUNNER_TEMP/asc.p8" >> "$GITHUB_ENV"
       - name: Lancer la construction chez Expo (sans attendre la fin)
-        run: npx --yes eas-cli build --platform "${{ inputs.plateforme }}" --profile "${{ inputs.profil }}" --non-interactive --no-wait
+        env:
+          EXPO_ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          EXPO_ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          EXPO_APPLE_TEAM_ID: A67K4V32H6
+        run: |
+          SUBMIT=""; [ "${{ inputs.profil }}" = "store" ] && SUBMIT="--auto-submit-with-profile=store"
+          npx --yes eas-cli build --platform "${{ inputs.plateforme }}" --profile "${{ inputs.profil }}" $SUBMIT --non-interactive --no-wait

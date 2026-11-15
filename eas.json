@@ -1,7 +1,7 @@
 {
   "cli": {
     "version": ">= 16.0.0",
-    "appVersionSource": "local"
+    "appVersionSource": "remote"
   },
   "build": {
     "dev": {
@@ -27,6 +27,22 @@
         "EAS_BUILD_PROFILE": "apk"
       },
       "environment": "preview"
+    },
+    "store": {
+      "distribution": "store",
+      "autoIncrement": true,
+      "env": {
+        "EAS_BUILD_PROFILE": "store"
+      },
+      "environment": "production"
+    }
+  },
+  "submit": {
+    "store": {
+      "ios": {
+        "ascAppId": "6835084417",
+        "appleTeamId": "A67K4V32H6"
+      }
     }
   }
 }
