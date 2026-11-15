@@ -9,7 +9,7 @@ module.exports = ({ config }) => {
   const googleServices = process.env.GOOGLE_SERVICES_JSON || (fs.existsSync('./google-services.json') ? './google-services.json' : undefined);
   return {
     ...config,
-    version: '0.2.0',
+    version: '1.0.0',
     ios: { ...config.ios, infoPlist: { ...config.ios.infoPlist, UIBackgroundModes: ['audio', 'voip'] } },
     android: {
       ...config.android,

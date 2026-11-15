@@ -2,7 +2,7 @@
   "expo": {
     "name": "Callikoe",
     "slug": "callikoe-mobile",
-    "version": "0.1.0",
+    "version": "1.0.0",
     "scheme": "callikoe",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -28,7 +28,7 @@
       "package": "fr.irtnetwork.callikoe",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#16141a"
+        "backgroundColor": "#d10a0a"
       },
       "permissions": [
         "CAMERA",
