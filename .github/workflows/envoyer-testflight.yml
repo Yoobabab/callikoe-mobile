@@ -1,0 +1,30 @@
+# Envoie la dernière version iPhone construite (profil « store ») sur TestFlight / App Store Connect.
+# À lancer à la main une fois la construction terminée sur expo.dev (environ 20 min) : Actions › « Envoyer sur TestFlight » › Run workflow.
+# La clé App Store Connect (secrets ASC_API_KEY, ASC_KEY_ID, ASC_ISSUER_ID) n'existe que le temps de ce lancement, jamais dans le dépôt.
+name: Envoyer sur TestFlight
+
+on:
+  workflow_dispatch:
+
+jobs:
+  envoyer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Clé App Store Connect
+        env:
+          ASC_API_KEY: ${{ secrets.ASC_API_KEY }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          [ -n "$ASC_API_KEY" ] || { echo "::error::Secret ASC_API_KEY manquant"; exit 1; }
+          printf '%s\n' "$ASC_API_KEY" > "$RUNNER_TEMP/asc.p8"
+          node -e '
+            const fs = require("fs"); const j = JSON.parse(fs.readFileSync("eas.json", "utf8"));
+            Object.assign(j.submit.store.ios, { ascApiKeyPath: process.env.RUNNER_TEMP + "/asc.p8", ascApiKeyId: process.env.ASC_KEY_ID, ascApiKeyIssuerId: process.env.ASC_ISSUER_ID });
+            fs.writeFileSync("eas.json", JSON.stringify(j, null, 2));'
+      - name: Envoyer la dernière version iPhone
+        run: npx --yes eas-cli submit --platform ios --profile store --latest --non-interactive --no-wait

@@ -63,5 +63,4 @@ jobs:
           EXPO_APPLE_TEAM_ID: A67K4V32H6
           EXPO_APPLE_TEAM_TYPE: COMPANY_OR_ORGANIZATION
         run: |
-          SUBMIT=""; [ "${{ inputs.profil }}" = "store" ] && SUBMIT="--auto-submit-with-profile=store"
-          npx --yes eas-cli build --platform "${{ inputs.plateforme }}" --profile "${{ inputs.profil }}" $SUBMIT --non-interactive --no-wait
+          npx --yes eas-cli build --platform "${{ inputs.plateforme }}" --profile "${{ inputs.profil }}" --non-interactive --no-wait
