@@ -21,7 +21,8 @@
         "NSMicrophoneUsageDescription": "Parler pendant tes appels.",
         "UIBackgroundModes": [
           "audio"
-        ]
+        ],
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
