@@ -19,11 +19,22 @@ export const NATIVE_CALLS = Platform.OS !== 'web' && Constants.executionEnvironm
 type CallsModule = typeof import('expo-callkit-telecom');
 type RTCSession = import('jssip/lib/RTCSession').RTCSession;
 
-export type CallView = { id: string; name: string; number: string; direction: 'in' | 'out'; status: 'ringing' | 'connecting' | 'connected'; muted: boolean; speaker: boolean; connectedAt?: number };
+/** Deuxième ligne pendant un appel : collègue appelé pour un transfert supervisé, ou nouvel appel */
+export type LegView = { name: string; number: string; status: 'connecting' | 'connected'; held: boolean; connectedAt?: number; consult: boolean };
+export type CallView = {
+  id: string; name: string; number: string; direction: 'in' | 'out'; status: 'ringing' | 'connecting' | 'connected'; muted: boolean; speaker: boolean; connectedAt?: number;
+  held: boolean;            // ligne principale en attente
+  extra?: LegView;          // deuxième ligne
+  focus: 'main' | 'extra';  // ligne avec laquelle on parle
+  notice?: string;          // message court (transfert refusé, collègue injoignable…)
+};
+type Leg = { session: RTCSession; name: string; number: string; status: 'connecting' | 'connected'; held: boolean; connectedAt?: number; consult: boolean };
 type CallState = {
   id: string; key: string; direction: 'in' | 'out'; serverCallId: string; number: string; name: string;
   session?: RTCSession; answerRequestId?: string; ended?: boolean; poll?: ReturnType<typeof setInterval>; view: CallView;
+  extra?: Leg; noticeTimer?: ReturnType<typeof setTimeout>;
 };
+export type TeamMate = { id: string; name: string; status: string; line: string; registered: boolean };
 
 let Calls: CallsModule | null = null;
 let accounts: Account[] = [];
@@ -41,7 +52,33 @@ let current: CallView | null = null;
 
 const log = (...a: unknown[]) => { if (__DEV__) console.log('[appels]', ...a); };
 const emit = () => listeners.forEach((l) => l(current));
-const setView = (c: CallState | null) => { current = c && !c.ended ? { ...c.view } : null; emit(); };
+const legView = (l: Leg): LegView => ({ name: l.name, number: l.number, status: l.status, held: l.held, connectedAt: l.connectedAt, consult: l.consult });
+const setView = (c: CallState | null) => { current = c && !c.ended ? { ...c.view, extra: c.extra ? legView(c.extra) : undefined, focus: c.extra ? c.view.focus : 'main' } : null; emit(); };
+const newView = (id: string, name: string, number: string, direction: 'in' | 'out', status: CallView['status']): CallView =>
+  ({ id, name, number, direction, status, muted: false, speaker: false, held: false, focus: 'main' });
+function notice(c: CallState, text: string) {
+  c.view = { ...c.view, notice: text }; setView(c);
+  if (c.noticeTimer) clearTimeout(c.noticeTimer);
+  c.noticeTimer = setTimeout(() => { c.view = { ...c.view, notice: undefined }; setView(c); }, 4000);
+}
+/** Une ligne de l'appel s'est arrêtée : la 2e ligne disparaît, ou elle remplace la ligne principale ; plus aucune ligne = fin de l'appel */
+function legGone(c: CallState, s: RTCSession, reason: 'remoteEnded' | 'answeredElsewhere' | 'failed') {
+  if (c.ended) return;
+  if (c.extra && s === c.extra.session) {
+    const x = c.extra;
+    c.extra = undefined; c.view = { ...c.view, focus: 'main' };
+    if (x.status !== 'connected') notice(c, `${x.name} n'a pas répondu`); else setView(c);
+    return;
+  }
+  if (s !== c.session) return;
+  if (c.extra) {
+    const x = c.extra;
+    c.extra = undefined; c.session = x.session; c.name = x.name; c.number = x.number;
+    c.view = { ...c.view, name: x.name, number: x.number, status: x.status, connectedAt: x.connectedAt, held: x.held, focus: 'main' };
+    setView(c); return;
+  }
+  endFromRemote(c, reason);
+}
 const keyOfHost = (host: string, ext: string) => accounts.find((a) => (a.host === host || a.fqdn === host) && a.extension === ext);
 const apnsEnv = (Constants.expoConfig?.extra as { apnsEnv?: string } | undefined)?.apnsEnv === 'development' ? 'development' : 'production';
 
@@ -87,9 +124,9 @@ function attachIncoming(c: CallState, s: RTCSession) {
   if (c.poll) { clearInterval(c.poll); c.poll = undefined; }
   s.on('failed', (e: { cause?: string; message?: { getHeader?: (h: string) => string | undefined } }) => {
     const elsewhere = /elsewhere|ailleurs/i.test(String(e?.message?.getHeader?.('Reason') || ''));
-    endFromRemote(c, elsewhere ? 'answeredElsewhere' : String(e?.cause) === 'Canceled' ? 'remoteEnded' : 'failed');
+    legGone(c, s, elsewhere ? 'answeredElsewhere' : String(e?.cause) === 'Canceled' ? 'remoteEnded' : 'failed');
   });
-  s.on('ended', () => endFromRemote(c, 'remoteEnded'));
+  s.on('ended', () => legGone(c, s, 'remoteEnded'));
   s.on('confirmed', () => {
     c.view = { ...c.view, status: 'connected', connectedAt: Date.now() }; setView(c);
     if (c.answerRequestId) Calls?.fulfillIncomingCallConnected(c.answerRequestId).catch(() => {});
@@ -106,6 +143,7 @@ function endFromRemote(c: CallState, reason: 'remoteEnded' | 'answeredElsewhere'
   if (c.ended) return;
   c.ended = true;
   if (c.poll) clearInterval(c.poll);
+  if (c.noticeTimer) clearTimeout(c.noticeTimer);
   Calls?.reportCallEnded(c.id, reason).catch(() => {});
   calls.delete(c.id); setView(null); stopIdleLines();
 }
@@ -118,7 +156,7 @@ async function onSessionAdded(session: import('expo-callkit-telecom').CallSessio
   const acc = meta.key ? accounts.find((a) => accountId(a) === meta.key) : keyOfHost(String(meta.host || ''), String(meta.ext || ''));
   if (!acc) { log('compte inconnu pour cet appel', meta); Calls?.reportCallEnded(session.id, 'failed').catch(() => {}); return; }
   const c: CallState = { id: session.id, key: accountId(acc), direction: 'in', serverCallId: ev.serverCallId, number: ev.caller.id, name: ev.caller.displayName || ev.caller.id,
-    view: { id: session.id, name: ev.caller.displayName || ev.caller.id, number: ev.caller.id, direction: 'in', status: 'ringing', muted: false, speaker: false } };
+    view: newView(session.id, ev.caller.displayName || ev.caller.id, ev.caller.id, 'in', 'ringing') };
   calls.set(session.id, c); setView(c);
   const pending = pendingInvites.get(ev.serverCallId);
   if (ownEvents.has(ev.eventId) && pending) { pendingInvites.delete(ev.serverCallId); ownEvents.delete(ev.eventId); attachIncoming(c, pending.session); return; }
@@ -144,7 +182,7 @@ export async function dial(number: string, name = ''): Promise<void> {
   const acc = accounts.find((a) => accountId(a) === activeKey);
   if (!acc) { Calls.reportCallEnded(id, 'failed').catch(() => {}); return; }
   calls.set(id, { id, key: activeKey, direction: 'out', serverCallId: '', number: n, name: name || n,
-    view: { id, name: name || n, number: n, direction: 'out', status: 'connecting', muted: false, speaker: false } });
+    view: newView(id, name || n, n, 'out', 'connecting') });
   setView(calls.get(id)!);
 }
 async function onOutgoingStarted(id: string) {
@@ -157,13 +195,105 @@ async function onOutgoingStarted(id: string) {
     const s = line.call(c.number);
     c.session = s;
     s.on('confirmed', () => { c.view = { ...c.view, status: 'connected', connectedAt: Date.now() }; setView(c); Calls?.reportOutgoingCallConnected(id).catch(() => {}); });
-    s.on('failed', () => endFromRemote(c, 'failed'));
-    s.on('ended', () => endFromRemote(c, 'remoteEnded'));
+    s.on('failed', () => legGone(c, s, 'failed'));
+    s.on('ended', () => legGone(c, s, 'remoteEnded'));
   } catch (e) { log('appel sortant', e); endFromRemote(c, 'failed'); }
 }
 
 // ---------------------------------------------------------------- Commandes de l'écran d'appel
-export function hangup() { if (current && Calls) Calls.endCall(current.id).catch(() => {}); }
+const cur = () => (current ? calls.get(current.id) : undefined);
+const focused = (c: CallState) => (c.extra && c.view.focus === 'extra' ? c.extra.session : c.session);
+function setHold(c: CallState, which: 'main' | 'extra', hold: boolean) {
+  const s = which === 'extra' ? c.extra?.session : c.session;
+  if (!s || !s.isEstablished()) return;
+  try { if (hold) s.hold(); else s.unhold(); } catch (e) { log('attente', e); }
+  if (which === 'extra' && c.extra) c.extra = { ...c.extra, held: hold }; else c.view = { ...c.view, held: hold };
+}
+/** Raccrocher : avec deux lignes, seulement celle avec qui on parle (l'autre reste en attente) */
+export function hangup() {
+  const c = cur();
+  if (!c || !Calls) return;
+  if (c.extra) { try { focused(c)?.terminate(); } catch { /* déjà fini */ } return; }
+  Calls.endCall(c.id).catch(() => {});
+}
+/** Mettre en attente / reprendre la ligne avec qui on parle */
+export function toggleHold() {
+  const c = cur();
+  if (!c) return;
+  const which = c.extra && c.view.focus === 'extra' ? 'extra' : 'main';
+  const held = which === 'extra' ? !!c.extra?.held : c.view.held;
+  setHold(c, which, !held); setView(c);
+}
+/** Reprendre l'autre ligne (l'actuelle passe en attente) */
+export function swapLines() {
+  const c = cur();
+  if (!c?.extra) return;
+  const to = c.view.focus === 'extra' ? 'main' : 'extra';
+  setHold(c, to === 'main' ? 'extra' : 'main', true);
+  setHold(c, to, false);
+  c.view = { ...c.view, focus: to }; setView(c);
+}
+/** Deuxième appel : l'appel en cours passe en attente. consult = transfert supervisé (on parle d'abord au collègue) */
+export function startSecondCall(number: string, name = '', consult = false) {
+  const c = cur();
+  const line = c && lines.get(c.key);
+  const n = number.replace(/[^\d+*#]/g, '');
+  if (!c || !line || !n || c.extra || !c.session?.isEstablished()) return;
+  if (!c.view.held) setHold(c, 'main', true);
+  let s: RTCSession;
+  try { s = line.call(n); } catch (e) { log('2e appel', e); notice(c, 'Appel impossible'); return; }
+  c.extra = { session: s, name: name || n, number: n, status: 'connecting', held: false, consult };
+  c.view = { ...c.view, focus: 'extra' };
+  s.on('confirmed', () => { if (c.extra?.session === s) { c.extra = { ...c.extra, status: 'connected', connectedAt: Date.now() }; setView(c); } });
+  s.on('failed', () => legGone(c, s, 'failed'));
+  s.on('ended', () => legGone(c, s, 'remoteEnded'));
+  if (c.view.muted) s.mute({ audio: true });
+  setView(c);
+}
+const referHandlers = (c: CallState) => ({
+  requestFailed: () => notice(c, 'Transfert refusé par le standard'),
+  failed: () => notice(c, 'Le transfert n\'a pas abouti'),
+});
+/** Transfert direct (aveugle) de la ligne avec qui on parle */
+export function transferBlind(target: string) {
+  const c = cur();
+  const line = c && lines.get(c.key);
+  const s = c && focused(c);
+  const t = target.replace(/[^\d+*#]/g, '');
+  if (!c || !line || !s || !t) return;
+  try {
+    s.refer(`sip:${t}@${line.sip.domain}`, { eventHandlers: referHandlers(c) });
+    notice(c, 'Transfert en cours…');
+  } catch (e) { log('transfert', e); notice(c, 'Transfert impossible'); }
+}
+/** Transfert supervisé : le client (en attente) part chez le collègue avec qui on parle */
+export function transferToConsulted() {
+  const c = cur();
+  if (!c?.extra || !c.session) return;
+  const target = c.extra.session;
+  try {
+    c.session.refer(target.remote_identity.uri, { replaces: target, eventHandlers: referHandlers(c) });
+    notice(c, 'Transfert en cours…');
+  } catch (e) { log('transfert supervisé', e); notice(c, 'Transfert impossible'); }
+}
+/** Annuler le transfert supervisé : on raccroche avec le collègue et on reprend le client */
+export function cancelSecondCall() {
+  const c = cur();
+  if (!c?.extra) return;
+  const s = c.extra.session;
+  c.extra = undefined;
+  try { s.terminate(); } catch { /* déjà fini */ }
+  setHold(c, 'main', false);
+  c.view = { ...c.view, focus: 'main' }; setView(c);
+}
+/** Collègues du PBX de l'appel en cours (pour le transfert) */
+export async function callTeam(): Promise<TeamMate[]> {
+  const c = cur();
+  const acc = c && accounts.find((a) => accountId(a) === c.key);
+  if (!acc) return [];
+  const r = await appApi<{ team: TeamMate[] }>(acc, '/app/team');
+  return (r.team || []).sort((a, b) => a.name.localeCompare(b.name, 'fr'));
+}
 export function toggleMute() { if (current && Calls) Calls.setMuted(current.id, !current.muted).catch(() => {}); }
 export function toggleSpeaker() {
   const c = current && calls.get(current.id);
@@ -172,7 +302,7 @@ export function toggleSpeaker() {
   Calls.setAudioSessionPortOverride(c.view.speaker);
   setView(c);
 }
-export function sendDtmf(d: string) { const c = current && calls.get(current.id); c?.session?.sendDTMF(d); }
+export function sendDtmf(d: string) { const c = cur(); if (c) focused(c)?.sendDTMF(d); }
 
 // ---------------------------------------------------------------- Notifications et présence
 async function sendPushTokens() {
@@ -230,6 +360,8 @@ export function initNativeCalls(): boolean {
     if (!c) return;
     c.ended = true;
     if (c.poll) clearInterval(c.poll);
+    if (c.noticeTimer) clearTimeout(c.noticeTimer);
+    try { c.extra?.session.terminate(); } catch { /* déjà fini */ }
     try { c.session?.terminate(c.session.isEstablished() ? undefined : { status_code: 486 }); } catch { /* déjà fini */ }
     calls.delete(id); setView(null); stopIdleLines();
   });
@@ -237,10 +369,10 @@ export function initNativeCalls(): boolean {
   C.addSetMutedActionListener(({ id, isMuted }) => {
     const c = calls.get(id);
     if (!c?.session) return;
-    if (isMuted) c.session.mute({ audio: true }); else c.session.unmute({ audio: true });
+    for (const s of [c.session, c.extra?.session]) { if (s) { if (isMuted) s.mute({ audio: true }); else s.unmute({ audio: true }); } }
     c.view = { ...c.view, muted: isMuted }; setView(c);
   });
-  C.addDTMFListener(({ id, digits }) => { calls.get(id)?.session?.sendDTMF(digits); });
+  C.addDTMFListener(({ id, digits }) => { const c = calls.get(id); if (c) focused(c)?.sendDTMF(digits); });
   // Appli déjà lancée par une notification (sonnerie en cours au démarrage du JS)
   C.getActiveCallSession().then((s) => { if (s && !calls.has(s.id)) onSessionAdded(s); }).catch(() => {});
   AppState.addEventListener('change', (st) => { if (st === 'active') onForeground(); else if (st === 'background') onBackground(); });
