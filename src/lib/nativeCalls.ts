@@ -27,12 +27,15 @@ export type CallView = {
   extra?: LegView;          // deuxième ligne
   focus: 'main' | 'extra';  // ligne avec laquelle on parle
   notice?: string;          // message court (transfert refusé, collègue injoignable…)
+  recording: boolean;       // ligne avec qui on parle en cours d'enregistrement
+  conference: boolean;      // conférence à 3 en cours
 };
 type Leg = { session: RTCSession; name: string; number: string; status: 'connecting' | 'connected'; held: boolean; connectedAt?: number; consult: boolean };
 type CallState = {
   id: string; key: string; direction: 'in' | 'out'; serverCallId: string; number: string; name: string;
   session?: RTCSession; answerRequestId?: string; ended?: boolean; poll?: ReturnType<typeof setInterval>; view: CallView;
   extra?: Leg; noticeTimer?: ReturnType<typeof setTimeout>;
+  recorded: Set<string>;    // lignes (Call-ID) enregistrées
 };
 export type TeamMate = { id: string; name: string; status: string; line: string; registered: boolean };
 
@@ -53,9 +56,16 @@ let current: CallView | null = null;
 const log = (...a: unknown[]) => { if (__DEV__) console.log('[appels]', ...a); };
 const emit = () => listeners.forEach((l) => l(current));
 const legView = (l: Leg): LegView => ({ name: l.name, number: l.number, status: l.status, held: l.held, connectedAt: l.connectedAt, consult: l.consult });
-const setView = (c: CallState | null) => { current = c && !c.ended ? { ...c.view, extra: c.extra ? legView(c.extra) : undefined, focus: c.extra ? c.view.focus : 'main' } : null; emit(); };
+const callIdOf = (s?: RTCSession): string => String((s as unknown as { _request?: { call_id?: string } } | undefined)?._request?.call_id || '');
+const setView = (c: CallState | null) => {
+  if (!c || c.ended) { current = null; emit(); return; }
+  const focus = c.extra ? c.view.focus : 'main';
+  const s = focus === 'extra' ? c.extra?.session : c.session;
+  current = { ...c.view, extra: c.extra ? legView(c.extra) : undefined, focus, recording: c.recorded.has(callIdOf(s)) };
+  emit();
+};
 const newView = (id: string, name: string, number: string, direction: 'in' | 'out', status: CallView['status']): CallView =>
-  ({ id, name, number, direction, status, muted: false, speaker: false, held: false, focus: 'main' });
+  ({ id, name, number, direction, status, muted: false, speaker: false, held: false, focus: 'main', recording: false, conference: false });
 function notice(c: CallState, text: string) {
   c.view = { ...c.view, notice: text }; setView(c);
   if (c.noticeTimer) clearTimeout(c.noticeTimer);
@@ -156,7 +166,7 @@ async function onSessionAdded(session: import('expo-callkit-telecom').CallSessio
   const acc = meta.key ? accounts.find((a) => accountId(a) === meta.key) : keyOfHost(String(meta.host || ''), String(meta.ext || ''));
   if (!acc) { log('compte inconnu pour cet appel', meta); Calls?.reportCallEnded(session.id, 'failed').catch(() => {}); return; }
   const c: CallState = { id: session.id, key: accountId(acc), direction: 'in', serverCallId: ev.serverCallId, number: ev.caller.id, name: ev.caller.displayName || ev.caller.id,
-    view: newView(session.id, ev.caller.displayName || ev.caller.id, ev.caller.id, 'in', 'ringing') };
+    view: newView(session.id, ev.caller.displayName || ev.caller.id, ev.caller.id, 'in', 'ringing'), recorded: new Set() };
   calls.set(session.id, c); setView(c);
   const pending = pendingInvites.get(ev.serverCallId);
   if (ownEvents.has(ev.eventId) && pending) { pendingInvites.delete(ev.serverCallId); ownEvents.delete(ev.eventId); attachIncoming(c, pending.session); return; }
@@ -182,7 +192,7 @@ export async function dial(number: string, name = ''): Promise<void> {
   const acc = accounts.find((a) => accountId(a) === activeKey);
   if (!acc) { Calls.reportCallEnded(id, 'failed').catch(() => {}); return; }
   calls.set(id, { id, key: activeKey, direction: 'out', serverCallId: '', number: n, name: name || n,
-    view: newView(id, name || n, n, 'out', 'connecting') });
+    view: newView(id, name || n, n, 'out', 'connecting'), recorded: new Set() });
   setView(calls.get(id)!);
 }
 async function onOutgoingStarted(id: string) {
@@ -285,6 +295,37 @@ export function cancelSecondCall() {
   try { s.terminate(); } catch { /* déjà fini */ }
   setHold(c, 'main', false);
   c.view = { ...c.view, focus: 'main' }; setView(c);
+}
+const accOf = (c: CallState) => accounts.find((a) => accountId(a) === c.key);
+const oldPbx = (e: unknown) => (e as { status?: number })?.status === 404 && /Not Found|Erreur 404/i.test(String((e as Error)?.message));
+/** Enregistrer / arrêter l'enregistrement de la ligne avec qui on parle (fait par le standard) */
+export async function toggleRecord() {
+  const c = cur();
+  const acc = c && accOf(c);
+  const id = c && callIdOf(focused(c));
+  if (!c || !acc || !id) return;
+  const on = !c.recorded.has(id);
+  try {
+    const r = await appApi<{ on: boolean; already?: boolean }>(acc, '/app/record', { call_id: id, on });
+    if (r.on) c.recorded.add(id); else c.recorded.delete(id);
+    notice(c, r.already ? 'Cet appel est déjà enregistré par le standard' : r.on ? 'Enregistrement en cours' : 'Enregistrement arrêté');
+  } catch (e) { notice(c, oldPbx(e) ? 'Mets à jour le standard pour enregistrer' : (e as Error).message || 'Enregistrement impossible'); }
+}
+/** Conférence à 3 : l'appel en attente et le 2e appel sont réunis avec moi */
+export async function startConference() {
+  const c = cur();
+  const acc = c && accOf(c);
+  if (!c || !acc || !c.extra || !c.session || c.extra.status !== 'connected') return;
+  // On reprend les deux lignes (fin de la musique d'attente) avant de les réunir
+  if (c.view.held) setHold(c, 'main', false);
+  if (c.extra.held) setHold(c, 'extra', false);
+  setView(c);
+  await new Promise((r) => setTimeout(r, 700));
+  try {
+    await appApi(acc, '/app/conference', { main: callIdOf(c.session), extra: callIdOf(c.extra?.session) });
+    c.view = { ...c.view, conference: true, focus: 'main' };
+    notice(c, 'Conférence à 3');
+  } catch (e) { notice(c, oldPbx(e) ? 'Mets à jour le standard pour la conférence' : (e as Error).message || 'Conférence impossible'); }
 }
 /** Collègues du PBX de l'appel en cours (pour le transfert) */
 export async function callTeam(): Promise<TeamMate[]> {

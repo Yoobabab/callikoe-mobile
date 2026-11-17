@@ -4,7 +4,7 @@ import { ActivityIndicator, FlatList, KeyboardAvoidingView, Modal, Platform, Pre
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Avatar } from '../components/ui';
 import {
-  callTeam, cancelSecondCall, hangup, sendDtmf, startSecondCall, subscribeCall, swapLines, toggleHold, toggleMute, toggleSpeaker,
+  callTeam, cancelSecondCall, hangup, sendDtmf, startConference, startSecondCall, toggleRecord, subscribeCall, swapLines, toggleHold, toggleMute, toggleSpeaker,
   transferBlind, transferToConsulted, type CallView, type TeamMate,
 } from '../lib/nativeCalls';
 import { colors, radius, spacing } from '../theme';
@@ -133,7 +133,8 @@ export default function CallOverlay() {
   const state = big.status === 'connected' ? since(big.at)
     : big.status === 'ringing' ? 'Appel entrant…' : onExtra || call.direction === 'out' ? 'Appel en cours…' : 'Connexion…';
   const consult = !!x?.consult;
-  const pill = consult ? 'Transfert supervisé' : big.held ? 'En attente' : '';
+  const pill = call.conference ? 'Conférence à 3' : consult ? 'Transfert supervisé' : big.held ? 'En attente' : call.recording ? '● Enregistrement' : '';
+  const canConf = x?.status === 'connected';
   const sub = big.name !== big.number ? big.number : '';
 
   return (
@@ -179,6 +180,9 @@ export default function CallOverlay() {
             <Pressable onPress={cancelSecondCall} style={({ pressed }) => [styles.bigBtn, pressed && { opacity: 0.8 }]}>
               <Text style={styles.bigText}>Annuler et reprendre le client</Text>
             </Pressable>
+            <Pressable onPress={startConference} disabled={!canConf} style={({ pressed }) => [styles.smallBtn, (pressed || !canConf) && { opacity: !canConf ? 0.45 : 0.7 }]}>
+              <Ionicons name="people" size={18} color={colors.text} /><Text style={styles.smallText}>Conférence à 3</Text>
+            </Pressable>
           </View>
         ) : (
           <View style={styles.grid}>
@@ -189,8 +193,8 @@ export default function CallOverlay() {
             <RoundBtn icon="arrow-forward" label="Transfert" disabled={big.status !== 'connected'} onPress={() => setSheet('transfer')} />
             <RoundBtn icon="person-add" label="Transfert supervisé" disabled={!live || !!x} onPress={() => setSheet('transfer')} />
             <RoundBtn icon="add" label="Nouvel appel" disabled={!live || !!x} onPress={() => setSheet('new')} />
-            <RoundBtn icon="people" label="Conférence" disabled onPress={() => {}} />
-            <RoundBtn icon="radio-button-on" label="Enregistrer" disabled onPress={() => {}} />
+            <RoundBtn icon="people" label="Conférence" disabled={!canConf} onPress={startConference} />
+            <RoundBtn icon="radio-button-on" label={call.recording ? 'Arrêter' : 'Enregistrer'} on={call.recording} disabled={big.status !== 'connected'} onPress={toggleRecord} />
           </View>
         )}
 
@@ -228,6 +232,8 @@ const styles = StyleSheet.create({
   consult: { gap: spacing.sm },
   bigBtn: { paddingVertical: 18, borderRadius: radius.lg, backgroundColor: '#2a2631', alignItems: 'center' },
   bigRed: { backgroundColor: '#d10a0a' },
+  smallBtn: { flexDirection: 'row', alignSelf: 'center', alignItems: 'center', gap: 8, paddingVertical: 10, paddingHorizontal: 16 },
+  smallText: { color: colors.text, fontSize: 15, fontWeight: '600' },
   bigText: { color: '#fff', fontSize: 16, fontWeight: '700' },
   pad: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: spacing.md },
   key: { width: 72, height: 72, borderRadius: 36, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' },
